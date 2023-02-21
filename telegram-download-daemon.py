@@ -299,12 +299,14 @@ with TelegramClient(getSession(), api_id, api_hash,
         
         while True:
             p_ready =True
+            new_event = []
             
             if p_ready:
                 try:
                     element = await queue.get()
                     event=element[0]
                     message=element[1]
+                    new_event = event
                 except Exception as e:
                     p_ready =False
                     try: 
@@ -341,9 +343,10 @@ with TelegramClient(getSession(), api_id, api_hash,
                         download_callback = lambda received, total: set_progress(filename, message, received, total)
                         
                         #await client.download_media(event.message, "{0}/{1}.{2}".format(tempFolder,filename,TELEGRAM_DAEMON_TEMP_SUFFIX), progress_callback = download_callback)
-                        await client.download_media(event.media, "{0}/{1}.{2}".format(tempFolder,filename,TELEGRAM_DAEMON_TEMP_SUFFIX), progress_callback = download_callback)
+                        await client.download_media(new_event.media, "{0}/{1}.{2}".format(tempFolder,filename,TELEGRAM_DAEMON_TEMP_SUFFIX), progress_callback = download_callback)
                         #await client.download_media(str(event.media.document.id), "{0}/{1}.{2}".format(tempFolder,filename,TELEGRAM_DAEMON_TEMP_SUFFIX), progress_callback = download_callback)
-                
+                        
+                        
                         set_progress(filename, message, 100, 100)
                         move("{0}/{1}.{2}".format(tempFolder,filename,TELEGRAM_DAEMON_TEMP_SUFFIX), "{0}/{1}".format(downloadFolder,filename))
                         #await log_reply(message, "{0} ready".format(filename))
@@ -378,7 +381,7 @@ with TelegramClient(getSession(), api_id, api_hash,
                                 #await msg_queue.put([3,channel_id,event.message.id,channel_id])
                                 #await msg_queue.put([2,channel_id, event.message.id])
                                 
-                                event = await client.get_messages(channel_id, ids=event.message.id)
+                                new_event = await client.get_messages(channel_id, ids=event.message.id)
                                 
                                 retry_flag = True
                                 retry_count+=1
