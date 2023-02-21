@@ -2,13 +2,13 @@
 
 A Telegram Daemon (not a bot) for file downloading automation [for channels of which you have admin privileges](https://github.com/alfem/telegram-download-daemon/issues/48).
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E03K0RP)
-
 If you have got an Internet connected computer or NAS and you want to automate file downloading from Telegram channels, this
 daemon is for you.
 
 Telegram bots are limited to 20Mb file size downloads. So I wrote this agent
 or daemon to allow bigger downloads (limited to 2GB by Telegram APIs).
+
+This is a modeifed version of https://github.com/alfem/telegram-download-daemon with better stability
 
 # Installation
 
@@ -51,23 +51,3 @@ You can also 'talk' to this daemon using your Telegram client:
 * Say "status" to the daemon to check the current status.
 * Say "clean" to remove stale (*.tdd) files from temporary directory.
 
-
-# Docker
-
-`docker pull alfem/telegram-download-daemon`
-
-When we use the [`TelegramClient`](https://docs.telethon.dev/en/latest/quick-references/client-reference.html#telegramclient) method, it requires us to interact with the `Console` to give it our phone number and confirm with a security code.
-
-To do this, when using *Docker*, you need to **interactively** run the container for the first time.
-
-When you use `docker-compose`, the `.session` file, where the login is stored is kept in *Volume* outside the container. Therefore, when using docker-compose you are required to:
-
-```bash
-$ docker-compose run --rm telegram-download-daemon
-# Interact with the console to authenticate yourself.
-# See the message "Signed in successfully as {youe name}"
-# Close the container
-$ docker-compose up -d
-```
-
-See the `sessions` volume in the [docker-compose.yml](docker-compose.yml) file.
