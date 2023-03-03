@@ -166,8 +166,6 @@ status_update_time = time.time()
 in_progress={}
 msg_queue = asyncio.Queue()
 error_count = 0
-missing_msg_queue = asyncio.Queue()
-last_msg_id = 0
 
 async def set_progress(filename, message, received, total):
     global lastUpdate
@@ -188,7 +186,7 @@ async def set_progress(filename, message, received, total):
         #await log_reply(message, progress_message)
         await msg_queue.put([1,message, progress_message])
         lastUpdate=currentTime
-        #time.sleep(1)
+        #await asyncio.sleep(1)
 
 
 with TelegramClient(getSession(), api_id, api_hash,
@@ -197,6 +195,8 @@ with TelegramClient(getSession(), api_id, api_hash,
     saveSession(client.session)
 
     queue = asyncio.Queue()
+    missing_msg_queue = asyncio.Queue()
+    last_msg_id = 0
     
     
     peerChannel = PeerChannel(channel_id)
@@ -219,10 +219,10 @@ with TelegramClient(getSession(), api_id, api_hash,
             
         if last_msg_id != 0 and int(event.message.id) != (last_msg_id+1) and int(event.message.id) > last_msg_id:
             for i in range(last_msg_id+1,int(event.message.id)):
-                missing_msg_queue.put(i)
+                await missing_msg_queue.put(i)
         last_msg_id = int(event.message.id)
 
-        #print("recieve Msg ID: "+str(event.message.id))
+        # print("recieve Msg ID: "+str(event.message.id))
         
         try:
 
@@ -249,7 +249,7 @@ with TelegramClient(getSession(), api_id, api_hash,
                         
                         #net speed
                         S_rate = psutil.net_io_counters().bytes_recv
-                        time.sleep(1)
+                        await asyncio.sleep(1)
                         E_rate = psutil.net_io_counters().bytes_recv
                         net_rate = E_rate -S_rate
                         net_rate = net_rate/1024./1024.
@@ -277,6 +277,8 @@ with TelegramClient(getSession(), api_id, api_hash,
                     if_send = True
                 elif command == "current":
                     pass
+                elif command == "checkhis":
+                    await pre_forward()
                 elif "added to queue" in command:
                     output = event.message.message
                 
@@ -322,6 +324,20 @@ with TelegramClient(getSession(), api_id, api_hash,
                     event=element[0]
                     message=element[1]
                     new_event = event
+                    
+                    filename=getFilename(event)
+                    if len(filename)>20:
+                        filename =str(event.media.document.id) + os.path.splitext(getFilename(event))[1]
+                        
+                    fileName, fileExtension = os.path.splitext(filename)
+                    tempfilename=fileName+"-"+getRandomId(8)+fileExtension
+                    while path.exists("{0}/{1}.{2}".format(tempFolder,tempfilename,TELEGRAM_DAEMON_TEMP_SUFFIX)) or path.exists("{0}/{1}".format(downloadFolder,tempfilename)):
+                        tempfilename=fileName+"-"+getRandomId(8)+fileExtension
+                        
+                    if path.exists("{0}/{1}.{2}".format(tempFolder,tempfilename,TELEGRAM_DAEMON_TEMP_SUFFIX)) or path.exists("{0}/{1}".format(downloadFolder,filename)):
+                        if duplicates == "rename":
+                            filename=tempfilename
+                            
                 except Exception as e:
                     p_ready =False
                     try: 
@@ -335,17 +351,6 @@ with TelegramClient(getSession(), api_id, api_hash,
                 while retry_flag == True:            
                     try:
                         retry_flag = False
-                        
-                        filename=getFilename(event)
-                        fileName, fileExtension = os.path.splitext(filename)
-                        tempfilename=fileName+"-"+getRandomId(8)+fileExtension
-                        while path.exists("{0}/{1}.{2}".format(tempFolder,tempfilename,TELEGRAM_DAEMON_TEMP_SUFFIX)) or path.exists("{0}/{1}".format(downloadFolder,tempfilename)):
-                            tempfilename=fileName+"-"+getRandomId(8)+fileExtension
-                            
-                        if path.exists("{0}/{1}.{2}".format(tempFolder,tempfilename,TELEGRAM_DAEMON_TEMP_SUFFIX)) or path.exists("{0}/{1}".format(downloadFolder,filename)):
-                            if duplicates == "rename":
-                                filename=tempfilename
-
          
                         if hasattr(event.media, 'photo'):
                             size = 0
@@ -371,7 +376,7 @@ with TelegramClient(getSession(), api_id, api_hash,
                         #delete message
                         #await client.delete_messages(channel_id, event.message.id)
                         await msg_queue.put([2,channel_id, event.message.id])
-                        time.sleep(2)
+                        await asyncio.sleep(2)
                         #await client.delete_messages(channel_id, message.id)
                         await msg_queue.put([2,channel_id, message.id])
                         if time.time() - status_update_time >=30 or len(in_progress) == 0:
@@ -386,11 +391,23 @@ with TelegramClient(getSession(), api_id, api_hash,
                             await msg_queue.put([1,message, "Error: {}".format(str(e)+"\n Retrying......")])
                         except:pass
                         
-                        if "No such file or directory:" in str(e) and retry_count<=MSG_trans_retry_limit:
+                        if "File name too long" in str(e):
+                            filename=str(event.media.document.id) + os.path.splitext(getFilename(event))[1]
+                            fileName, fileExtension = os.path.splitext(filename)
+                            tempfilename=fileName+"-"+getRandomId(8)+fileExtension
+                            while path.exists("{0}/{1}.{2}".format(tempFolder,tempfilename,TELEGRAM_DAEMON_TEMP_SUFFIX)) or path.exists("{0}/{1}".format(downloadFolder,tempfilename)):
+                                tempfilename=fileName+"-"+getRandomId(8)+fileExtension
+                                
+                            if path.exists("{0}/{1}.{2}".format(tempFolder,tempfilename,TELEGRAM_DAEMON_TEMP_SUFFIX)) or path.exists("{0}/{1}".format(downloadFolder,filename)):
+                                if duplicates == "rename":
+                                    filename=tempfilename
+                                    
+                            retry_flag = True
+                        elif "No such file or directory:" in str(e) and retry_count<=MSG_trans_retry_limit:
                             retry_flag = True
                             retry_count+=1
                         elif "Timeout while fetching data (caused by GetFileRequest)" in str(e) and retry_count<=MSG_trans_retry_limit:
-                            time.sleep(MSG_trans_retry_delay*retry_count)
+                            await asyncio.sleep(MSG_trans_retry_delay*retry_count)
                             retry_flag = True
                             retry_count+=1
                         elif "The file reference has expired" in str(e) and retry_count<=MSG_trans_retry_limit:
@@ -406,7 +423,7 @@ with TelegramClient(getSession(), api_id, api_hash,
                                 retry_flag = True
                                 retry_count+=1
                                 
-                                time.sleep(MSG_trans_retry_delay)
+                                await asyncio.sleep(MSG_trans_retry_delay)
                                 # error_count +=1
                             except Exception as e2:
                                 try:
@@ -453,32 +470,62 @@ with TelegramClient(getSession(), api_id, api_hash,
                     elif  msg_element[0] == 4:
                         message= await send_reply(msg_element[1],msg_element[2])
                         await queue.put([msg_element[1], message])
+                    elif  msg_element[0] == 5:
+                        await client.forward_messages(msg_element[1], msg_element[2], msg_element[3])
+                        await client.delete_messages(msg_element[1],msg_element[2])
                     # msg_queue.task_done
                 except Exception as e:
+                    # print('retransfer: ', str(e))
                     if "Content of the message was not modified (caused by EditMessageRequest)" in str(e) and retry_count<=MSG_trans_retry_limit:
                         retry_flag = True
                         retry_count+=1
-                        time.sleep(MSG_trans_retry_delay*retry_count)
-                    elif retry_count<=MSG_trans_retry_limit:
+                        await asyncio.sleep(MSG_trans_retry_delay*retry_count)
+                    elif "A wait of" in str(e) and "seconds is required" in str(e):
+                        print('message transfer retry: ', e)
+                        await asyncio.sleep(int(str(e).split(" ")[3]))
                         retry_flag = True
-                        retry_count+=1
-                        time.sleep(MSG_trans_retry_delay*retry_count)
+                    elif "The specified message ID is invalid or you can't do that operation on such message" in str(e):
+                        pass
+                    elif (msg_element[0] == 4 or msg_element[0] == 5) and retry_count<=MSG_trans_retry_limit:
+                        retry_flag = True
+                        await asyncio.sleep(MSG_trans_retry_delay)
                     else:
-                        print('message transfer error: ', e)
+                        print("message transfer error"+str(msg_element[0])+": "+ str(e))
                         print(msg_element)
                 
-            time.sleep(1)
+            await asyncio.sleep(0.3)
             
     async def msg_fill_worker():
+        
         while 1==1:
             try:
                 missing_id = await missing_msg_queue.get()
                 await msg_queue.put([3,channel_id,missing_id,channel_id])
                 await msg_queue.put([2,channel_id, missing_id])
             except Exception as e:
-                print("message resend error: ("+ str(missing_id) +")"+e )
+                print("message resend error: ("+ str(missing_id) +")"+str(e) )
                 
             
+            
+    async def pre_forward():
+        history_msg = []
+        print("start reading")
+        async for message in client.iter_messages(channel_id, reverse= True):
+            history_msg.append(message.id)
+        
+        print("finish reading message count: "+ str(len(history_msg)))
+        
+        for msg_id in history_msg:
+            message = await client.get_messages(channel_id, ids=msg_id)
+            if message.media :
+                #await msg_queue.put([3,channel_id, msg_id, channel_id])
+                #await msg_queue.put([2,channel_id, msg_id])
+                await msg_queue.put([5,channel_id, msg_id, channel_id])
+            else:
+                await msg_queue.put([2,channel_id, msg_id])
+            await asyncio.sleep(1)
+            
+        print("finish pre forward")
  
     async def start():
 
@@ -492,6 +539,7 @@ with TelegramClient(getSession(), api_id, api_hash,
         task = loop.create_task(msg_fill_worker())
         tasks.append(task)
         await sendHelloMessage(client, peerChannel)
+        await pre_forward()
         await client.run_until_disconnected()
         for task in tasks:
             task.cancel()
